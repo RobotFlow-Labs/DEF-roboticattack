@@ -1,21 +1,17 @@
 # Custom Kernels — DEF-roboticattack
 
-This folder contains custom CUDA and MLX Metal kernels developed as part of the ANIMA optimization pipeline.
+This folder contains ANIMA-owned optimization tracks for defense runtime acceleration.
 
 ## Structure
-- `cuda/` — Custom CUDA kernels (.cu files)
-- `mlx/` — MLX Metal kernels
-- `triton/` — Triton kernels (if applicable)
-
-## IP Note
-Custom kernels are proprietary ANIMA IP. They enable:
-- Faster training on smaller hardware
-- Real-time edge deployment (Jetson Orin NX)
-- Competitive advantage in defense marketplace
+- `cuda/fused_patch_blend.cu` — CUDA scaffold for fused blend path
+- `mlx/fused_patch_blend.metal` — MLX/Metal scaffold for backend parity
+- `triton/fused_patch_blend.py` — Triton scaffold for fast iteration
 
 ## Optimization Targets
-1. Fused attention operations
-2. Custom convolution kernels
-3. Quantized inference (INT8/FP16)
-4. Memory-optimized data pipelines
-5. Operator fusion for inference graphs
+1. Fused patch blend + normalization
+2. Fused edge-gradient/anomaly feature extraction
+3. INT8/FP16 inference-time defense kernels
+4. Memory-optimized image batch path for edge devices
+
+## IP Note
+Every optimized kernel in this folder is ANIMA proprietary IP.

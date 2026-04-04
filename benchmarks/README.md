@@ -4,7 +4,7 @@
 | Metric | Baseline | Optimized | Speedup |
 |--------|----------|-----------|---------|
 | Latency (ms) | — | — | — |
-| Throughput (FPS) | — | — | — |
+| Throughput (samples/s) | — | — | — |
 | Memory (MB) | — | — | — |
 | Model Size (MB) | — | — | — |
 
@@ -14,7 +14,10 @@
 - Jetson Orin NX (edge deployment)
 - Jetson AGX Orin (edge deployment)
 
-## Methodology
-- 100 warmup iterations, 1000 test iterations
-- Report mean ± std for all metrics
-- Compare: PyTorch baseline → custom kernels → quantized
+## Baseline Command
+```bash
+python benchmarks/benchmark_patch_guard.py --backend auto --iterations 200 --batch-size 8
+```
+
+## Output
+- JSON reports saved under `benchmarks/results/patch_guard_<backend>.json`

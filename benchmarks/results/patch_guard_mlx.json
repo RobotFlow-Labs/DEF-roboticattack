@@ -1,0 +1,10 @@
+{
+  "backend": "mlx",
+  "iterations": 5,
+  "batch_size": 2,
+  "height": 64,
+  "width": 64,
+  "latency_ms_mean": 0.05784158129245043,
+  "latency_ms_std": 0.005954486331602489,
+  "throughput_samples_per_sec": 34577.20130243125
+}
