@@ -1,12 +1,12 @@
 import importlib.util
 import os
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Literal
 
 BackendName = Literal["cuda", "mlx", "cpu"]
 
-# Some mixed scientific Python stacks preload OpenMP multiple times.
-# Keep backend probing resilient in heterogeneous environments.
+# Prevent OpenMP duplicate library errors in heterogeneous Python stacks
+# (e.g., numpy + torch both link against libiomp). Safe to set globally.
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 
@@ -31,7 +31,7 @@ def _mlx_available() -> bool:
     return importlib.util.find_spec("mlx") is not None
 
 
-def resolve_backend(preferred: Optional[str] = None) -> BackendInfo:
+def resolve_backend(preferred: str | None = None) -> BackendInfo:
     raw = (preferred or os.getenv("ANIMA_BACKEND", "auto")).lower().strip()
     if raw not in {"auto", "cuda", "mlx", "cpu"}:
         raise ValueError(f"Unsupported backend '{raw}'. Expected auto|cuda|mlx|cpu")

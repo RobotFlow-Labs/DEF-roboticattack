@@ -7,7 +7,6 @@ import numpy as np
 import pytest
 import torch
 
-from def_roboticattack.config import DefenseConfig
 from def_roboticattack.data.synthetic import SyntheticPatchDataset
 from def_roboticattack.defense.detector import PatchAnomalyDetector
 from def_roboticattack.defense.transforms import clamp_patch_intensity, gaussian_blur_3x3

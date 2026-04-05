@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   serve:
     build:
@@ -48,6 +46,13 @@ services:
     command: ["python", "-m", "pytest", "tests/", "-x", "-v"]
     volumes:
       - weights:/data/weights
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
 volumes:
   weights:

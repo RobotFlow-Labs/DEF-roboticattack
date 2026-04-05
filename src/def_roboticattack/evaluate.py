@@ -23,6 +23,12 @@ from def_roboticattack.models.patch_detector import PatchDetectorNet
 from def_roboticattack.pipeline.runtime import DefenseRuntime
 
 
+def _sync(device: torch.device):
+    """Synchronize only if CUDA device."""
+    if device.type == "cuda":
+        torch.cuda.synchronize()
+
+
 @torch.no_grad()
 def evaluate_accuracy(
     model: PatchDetectorNet,
@@ -76,24 +82,23 @@ def evaluate_latency(
     model.eval()
     dummy = torch.rand(batch_size, 3, image_size, image_size, device=device)
 
-    # Warmup
     for _ in range(warmup):
         _ = model(dummy)
-    torch.cuda.synchronize()
+    _sync(device)
 
-    # Timed runs
     latencies = []
     for _ in range(iterations):
-        torch.cuda.synchronize()
+        _sync(device)
         t0 = time.perf_counter()
         _ = model(dummy)
-        torch.cuda.synchronize()
+        _sync(device)
         latencies.append((time.perf_counter() - t0) * 1000.0)
 
     mean_ms = statistics.mean(latencies)
     std_ms = statistics.pstdev(latencies)
-    p50 = sorted(latencies)[len(latencies) // 2]
-    p99 = sorted(latencies)[int(len(latencies) * 0.99)]
+    sorted_lat = sorted(latencies)  # L4: sort once
+    p50 = sorted_lat[len(sorted_lat) // 2]
+    p99 = sorted_lat[int(len(sorted_lat) * 0.99)]
     throughput = batch_size / (mean_ms / 1000.0)
 
     return {
@@ -117,16 +122,15 @@ def evaluate_full_pipeline(
     """Benchmark full defense pipeline (sanitize + heuristic + neural)."""
     dummy = torch.rand(batch_size, 3, image_size, image_size, device=device)
 
-    # Warmup
     for _ in range(20):
         runtime.full_defense(dummy)
 
     latencies = []
     for _ in range(iterations):
-        torch.cuda.synchronize()
+        _sync(device)
         t0 = time.perf_counter()
         runtime.full_defense(dummy)
-        torch.cuda.synchronize()
+        _sync(device)
         latencies.append((time.perf_counter() - t0) * 1000.0)
 
     mean_ms = statistics.mean(latencies)
@@ -138,7 +142,12 @@ def evaluate_full_pipeline(
     }
 
 
-def run_eval(checkpoint_path: str, num_samples: int = 5000, batch_size: int = 32):
+def run_eval(
+    checkpoint_path: str,
+    num_samples: int = 5000,
+    batch_size: int = 32,
+    image_size: int = 224,
+):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = PatchDetectorNet(in_channels=3).to(device)
 
@@ -149,12 +158,17 @@ def run_eval(checkpoint_path: str, num_samples: int = 5000, batch_size: int = 32
 
     param_count = sum(p.numel() for p in model.parameters())
 
-    # Eval dataset (different seed than training)
+    # M3: read eval params from checkpoint config if available, else use defaults
+    ckpt_config = ckpt.get("config", {}).get("data", {})
+    patch_min = ckpt_config.get("patch_ratio_min", 0.01)
+    patch_max = ckpt_config.get("patch_ratio_max", 0.20)
+    attack_prob = ckpt_config.get("attack_prob", 0.5)
+
     eval_ds = SyntheticPatchDataset(
         num_samples=num_samples,
-        image_size=224,
-        patch_ratio_range=(0.01, 0.20),
-        attack_prob=0.5,
+        image_size=image_size,
+        patch_ratio_range=(patch_min, patch_max),
+        attack_prob=attack_prob,
         seed=999,
     )
     eval_loader = DataLoader(eval_ds, batch_size=batch_size, shuffle=False, num_workers=4)
@@ -164,31 +178,35 @@ def run_eval(checkpoint_path: str, num_samples: int = 5000, batch_size: int = 32
     print(f"[EVAL] eval_samples={num_samples}")
     print()
 
-    # 1. Accuracy
     acc_metrics = evaluate_accuracy(model, eval_loader, device)
-    print(f"[ACCURACY] acc={acc_metrics['accuracy']:.4f} "
-          f"prec={acc_metrics['precision']:.4f} "
-          f"rec={acc_metrics['recall']:.4f} "
-          f"f1={acc_metrics['f1']:.4f}")
-    print(f"  TP={acc_metrics['tp']} FP={acc_metrics['fp']} "
-          f"TN={acc_metrics['tn']} FN={acc_metrics['fn']}")
+    print(
+        f"[ACCURACY] acc={acc_metrics['accuracy']:.4f} "
+        f"prec={acc_metrics['precision']:.4f} "
+        f"rec={acc_metrics['recall']:.4f} "
+        f"f1={acc_metrics['f1']:.4f}"
+    )
+    print(
+        f"  TP={acc_metrics['tp']} FP={acc_metrics['fp']} "
+        f"TN={acc_metrics['tn']} FN={acc_metrics['fn']}"
+    )
 
-    # 2. Model-only latency
-    lat_metrics = evaluate_latency(model, device, batch_size=8)
-    print(f"\n[LATENCY] mean={lat_metrics['latency_ms_mean']:.2f}ms "
-          f"p50={lat_metrics['latency_ms_p50']:.2f}ms "
-          f"p99={lat_metrics['latency_ms_p99']:.2f}ms "
-          f"throughput={lat_metrics['throughput_samples_per_sec']:.0f} samples/s")
+    lat_metrics = evaluate_latency(model, device, batch_size=8, image_size=image_size)
+    print(
+        f"\n[LATENCY] mean={lat_metrics['latency_ms_mean']:.2f}ms "
+        f"p50={lat_metrics['latency_ms_p50']:.2f}ms "
+        f"p99={lat_metrics['latency_ms_p99']:.2f}ms "
+        f"throughput={lat_metrics['throughput_samples_per_sec']:.0f} samples/s"
+    )
 
-    # 3. Full pipeline latency
-    runtime = DefenseRuntime(backend="cuda")
+    runtime = DefenseRuntime(backend="cuda" if device.type == "cuda" else "cpu")
     runtime.load_model(checkpoint_path)
-    pipe_metrics = evaluate_full_pipeline(runtime, device, batch_size=8)
-    print(f"\n[PIPELINE] mean={pipe_metrics['pipeline_latency_ms_mean']:.2f}ms "
-          f"throughput={pipe_metrics['pipeline_throughput_samples_per_sec']:.0f} samples/s")
+    pipe_metrics = evaluate_full_pipeline(runtime, device, batch_size=8, image_size=image_size)
+    print(
+        f"\n[PIPELINE] mean={pipe_metrics['pipeline_latency_ms_mean']:.2f}ms "
+        f"throughput={pipe_metrics['pipeline_throughput_samples_per_sec']:.0f} samples/s"
+    )
 
-    # Combine report
-    gpu_name = torch.cuda.get_device_name(device) if torch.cuda.is_available() else "CPU"
+    gpu_name = torch.cuda.get_device_name(device) if device.type == "cuda" else "CPU"
     report = {
         "checkpoint": str(checkpoint_path),
         "model_params": param_count,
@@ -199,13 +217,11 @@ def run_eval(checkpoint_path: str, num_samples: int = 5000, batch_size: int = 32
         **pipe_metrics,
     }
 
-    # Save report
     report_dir = Path("/mnt/artifacts-datai/reports/DEF-roboticattack")
     report_dir.mkdir(parents=True, exist_ok=True)
     report_file = report_dir / "eval_report.json"
     report_file.write_text(json.dumps(report, indent=2))
     print(f"\n[SAVED] {report_file}")
-
     return report
 
 
@@ -214,8 +230,9 @@ def main():
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--num-samples", type=int, default=5000)
     parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--image-size", type=int, default=224)
     args = parser.parse_args()
-    run_eval(args.checkpoint, args.num_samples, args.batch_size)
+    run_eval(args.checkpoint, args.num_samples, args.batch_size, args.image_size)
 
 
 if __name__ == "__main__":

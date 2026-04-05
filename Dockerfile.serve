@@ -7,12 +7,13 @@ FROM ghcr.io/robotflow-labs/anima-serve:jazzy AS base
 
 WORKDIR /app
 
-# Install module dependencies
+# Install module dependencies (H6: pin torch range, no pydantic)
 COPY pyproject.toml .
 RUN uv pip install --system --no-cache-dir \
-    numpy>=1.26 typer>=0.12.3 pydantic>=2.8 \
-    safetensors>=0.4 onnx>=1.15 \
-    torch torchvision --index-url https://download.pytorch.org/whl/cu128
+    "numpy>=1.26" "typer>=0.12.3" \
+    "safetensors>=0.4" "onnx>=1.15" \
+    "fastapi>=0.110" "uvicorn>=0.29" \
+    "torch>=2.2,<3.0" "torchvision>=0.17,<1.0" --index-url https://download.pytorch.org/whl/cu128
 
 # Copy module source
 COPY src/ src/

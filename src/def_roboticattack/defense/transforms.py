@@ -1,36 +1,24 @@
+"""Input-domain sanitization transforms for VLA adversarial patch defense."""
 from __future__ import annotations
 
-
-def _require_torch():
-    try:
-        import torch
-        import torch.nn.functional as F
-
-        return torch, F
-    except Exception as exc:
-        raise RuntimeError("Torch is required for transform operations") from exc
+import torch
+import torch.nn.functional as F
 
 
-def clamp_patch_intensity(images, percentile: float = 99.5):
+def clamp_patch_intensity(images: torch.Tensor, percentile: float = 99.5) -> torch.Tensor:
     """Clamp extreme per-image activations that are common in patch artifacts."""
-
-    torch, _ = _require_torch()
     if images.ndim != 4:
         raise ValueError("Expected images tensor with shape [B, C, H, W]")
 
     b = images.shape[0]
     flat = images.view(b, -1)
-    hi = torch.quantile(flat, percentile / 100.0, dim=1, keepdim=True)
-    lo = torch.quantile(flat, (100.0 - percentile) / 100.0, dim=1, keepdim=True)
-    lo = lo.view(b, 1, 1, 1)
-    hi = hi.view(b, 1, 1, 1)
+    hi = torch.quantile(flat, percentile / 100.0, dim=1, keepdim=True).view(b, 1, 1, 1)
+    lo = torch.quantile(flat, (100.0 - percentile) / 100.0, dim=1, keepdim=True).view(b, 1, 1, 1)
     return images.clamp(min=lo, max=hi)
 
 
-def gaussian_blur_3x3(images, blur_strength: float = 0.15):
+def gaussian_blur_3x3(images: torch.Tensor, blur_strength: float = 0.15) -> torch.Tensor:
     """Low-cost smoothing to suppress high-frequency patch edges."""
-
-    torch, F = _require_torch()
     if images.ndim != 4:
         raise ValueError("Expected images tensor with shape [B, C, H, W]")
 

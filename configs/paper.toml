@@ -40,6 +40,11 @@ enabled = true
 patience = 10
 min_delta = 0.001
 
+[defense]
+edge_threshold = 0.15
+clamp_percentile = 99.5
+blur_strength = 0.15
+
 [logging]
 log_dir = "/mnt/artifacts-datai/logs/DEF-roboticattack"
 log_every_n_steps = 50

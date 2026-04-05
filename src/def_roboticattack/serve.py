@@ -16,7 +16,6 @@ import os
 import time
 from pathlib import Path
 
-import numpy as np
 import torch
 
 
@@ -132,7 +131,7 @@ class DefRoboticAttackNode:
         }
 
 
-def create_app() -> "FastAPI":
+def create_app():
     """Create FastAPI application with standard ANIMA endpoints."""
     from fastapi import FastAPI, UploadFile, File
     from fastapi.responses import JSONResponse
