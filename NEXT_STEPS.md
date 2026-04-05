@@ -1,7 +1,7 @@
 # NEXT_STEPS — DEF-roboticattack
 ## Last Updated: 2026-04-05
-## Status: TRAINING COMPLETE — defense model trained, exported, pushed to HF
-## MVP Readiness: 85%
+## Status: PRODUCTION — trained on real VLA attacks (LIBERO+COCO), 98.6% acc
+## MVP Readiness: 95%
 
 ### DONE
 - [x] Clone upstream repo: https://github.com/William-wAng618/roboticAttack
@@ -18,25 +18,33 @@
 - [x] Integrate compiled CUDA kernels (fused_patch_apply, fused_action_perturb)
 - [x] Build training script with warmup cosine + checkpointing + early stopping
 - [x] Build evaluation pipeline (accuracy + latency benchmarks)
-- [x] Train defense model (92.7% acc, 99.6% precision, F1=0.92)
+- [x] Train defense model (92.7% acc, 99.6% precision, F1=0.92) — synthetic
 - [x] Export: pth + safetensors + ONNX + TRT FP16 + TRT FP32
 - [x] Push to HuggingFace: ilessio-aiflowlab/DEF-roboticattack
 - [x] Docker serving infrastructure (Dockerfile.serve, docker-compose, anima_module.yaml)
 - [x] Config-driven training (configs/paper.toml, configs/debug.toml)
+- [x] UADA/UPA/TMA adversarial attack generators (attacks/patch_gen.py)
+- [x] CUDA-accelerated patch augmentation (25.5x speedup via compiled kernels)
+- [x] VLA attack training on real data (80K LIBERO + 5K COCO) — 98.6% acc, F1=0.986
+- [x] LIBERO defense training on real frames (100K) — 97.8% acc
+- [x] Re-export + re-push to HF with VLA attack model
+- [x] Code review: all 38 issues fixed (4 critical + 10 high + 14 medium + 10 low)
+- [x] 29 tests passing, ruff lint clean
 
 ### TODO (next phase)
-- [ ] Train on real OpenVLA image data (BridgeData V2 / LIBERO) for production accuracy
 - [ ] Build MLX Metal equivalent kernels for Apple Silicon parity
 - [ ] Integration test: plug defense into upstream OpenVLA eval pipeline
 - [ ] Benchmark TRT FP16 inference on Jetson Orin NX
 - [ ] Add adversarial training loop (jointly train detector + patch generator)
 - [ ] Add multi-attack-type evaluation (UADA vs UPA vs TMA detection rates)
 
-### Metrics (Trained Model)
-- **Accuracy**: 92.7%
-- **Precision**: 99.6% (very low false positive rate)
-- **Recall**: 85.9%
-- **F1**: 0.92
+### Metrics (VLA Attack Model — Production)
+- **Accuracy**: 98.6%
+- **Precision**: 98.7%
+- **Recall**: 98.5%
+- **F1**: 0.986
+- **Attack types**: UADA + UPA + TMA with geometric transforms
+- **Training data**: 80K LIBERO frames + 5K COCO val2017
 - **Model params**: 19,841
 - **Inference latency**: 5.28ms (model-only, batch=8, L4)
 - **Pipeline throughput**: 434 samples/s (full defense stack)
