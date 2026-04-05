@@ -1,0 +1,52 @@
+# DEF-roboticattack — VLA adversarial attack defense training
+# Uses LIBERO + COCO real images with UADA/UPA/TMA attack patches
+# This is the production training config for the defense model
+
+[training]
+batch_size = "auto"
+learning_rate = 0.0005
+epochs = 30
+optimizer = "adamw"
+weight_decay = 0.01
+scheduler = "cosine"
+warmup_steps = 500
+precision = "fp16"
+gradient_accumulation = 1
+max_grad_norm = 1.0
+seed = 42
+
+[model]
+in_channels = 3
+image_size = 224
+
+[data]
+dataset = "vla_attack"
+max_libero_frames = 80000
+max_coco_images = 5000
+patch_ratio_min = 0.01
+patch_ratio_max = 0.20
+attack_prob = 0.5
+use_geometry = true
+num_workers = 4
+pin_memory = true
+
+[defense]
+edge_threshold = 0.15
+clamp_percentile = 99.5
+blur_strength = 0.15
+
+[checkpoint]
+save_every_n_steps = 500
+keep_top_k = 2
+metric = "val_loss"
+mode = "min"
+save_dir = "/mnt/artifacts-datai/checkpoints/DEF-roboticattack-vla"
+
+[early_stopping]
+enabled = true
+patience = 8
+min_delta = 0.001
+
+[logging]
+log_dir = "/mnt/artifacts-datai/logs/DEF-roboticattack-vla"
+log_every_n_steps = 100

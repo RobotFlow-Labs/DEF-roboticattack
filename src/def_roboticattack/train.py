@@ -198,11 +198,30 @@ def train(config: dict, resume: str | None = None, max_steps: int | None = None)
 
     grad_accum_steps = tc.get("gradient_accumulation", 1)
 
-    # Build dataset — real LIBERO frames or synthetic
+    # Build dataset
     dataset_type = dc.get("dataset", "synthetic")
-    if dataset_type == "libero":
-        from pathlib import Path
+    if dataset_type == "vla_attack":
+        from def_roboticattack.data.vla_attack_dataset import VLAAttackDataset
 
+        all_ds = VLAAttackDataset(
+            image_size=image_size,
+            patch_ratio_range=(dc["patch_ratio_min"], dc["patch_ratio_max"]),
+            attack_prob=dc["attack_prob"],
+            use_geometry=dc.get("use_geometry", True),
+            max_libero_frames=dc.get("max_libero_frames", 50000),
+            max_coco_images=dc.get("max_coco_images", 5000),
+            seed=seed,
+        )
+        n_total = len(all_ds)
+        n_val = max(1, min(n_total // 10, 10000))
+        n_train = n_total - n_val
+        train_ds, val_ds = torch.utils.data.random_split(
+            all_ds, [n_train, n_val],
+            generator=torch.Generator().manual_seed(seed),
+        )
+        print(f"[DATA] VLA attack dataset: {n_total} images ({n_train} train, {n_val} val)")
+        print("[DATA] Attack types: UADA + UPA + TMA with geometric transforms")
+    elif dataset_type == "libero":
         from def_roboticattack.data.libero_defense import LIBERODefenseDataset
 
         frames_dir = Path(dc["frames_dir"])
@@ -214,7 +233,6 @@ def train(config: dict, resume: str | None = None, max_steps: int | None = None)
             max_frames=dc.get("max_train_frames", 0) + dc.get("max_val_frames", 0),
             seed=seed,
         )
-        # Split into train/val
         n_total = len(all_ds)
         max_train = dc.get("max_train_frames", n_total)
         max_val = dc.get("max_val_frames", max(1, n_total // 10))
