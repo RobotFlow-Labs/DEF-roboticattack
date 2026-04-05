@@ -16,13 +16,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-cuda = ["torch>=2.2"]
+cuda = ["torch>=2.2", "safetensors>=0.4", "onnx>=1.15"]
 mlx = ["mlx>=0.20"]
 dev = [
   "pytest>=8.2",
   "ruff>=0.6",
   "mypy>=1.11",
 ]
+export = ["safetensors>=0.4", "onnx>=1.15", "onnxruntime-gpu>=1.17"]
 
 [project.scripts]
 def-roboticattack = "def_roboticattack.cli:main"

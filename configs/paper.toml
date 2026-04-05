@@ -1,0 +1,45 @@
+# DEF-roboticattack — Paper-aligned defense detector training config
+# Defense model: PatchDetectorNet (multi-branch CNN)
+# Task: binary classification (clean vs adversarial-patched VLA inputs)
+
+[training]
+batch_size = "auto"
+learning_rate = 0.001
+epochs = 50
+optimizer = "adamw"
+weight_decay = 0.01
+scheduler = "cosine"
+warmup_steps = 200
+precision = "fp16"
+gradient_accumulation = 1
+max_grad_norm = 1.0
+seed = 42
+
+[model]
+in_channels = 3
+image_size = 224
+
+[data]
+num_train_samples = 50000
+num_val_samples = 5000
+patch_ratio_min = 0.01
+patch_ratio_max = 0.20
+attack_prob = 0.5
+num_workers = 4
+pin_memory = true
+
+[checkpoint]
+save_every_n_steps = 500
+keep_top_k = 2
+metric = "val_loss"
+mode = "min"
+save_dir = "/mnt/artifacts-datai/checkpoints/DEF-roboticattack"
+
+[early_stopping]
+enabled = true
+patience = 10
+min_delta = 0.001
+
+[logging]
+log_dir = "/mnt/artifacts-datai/logs/DEF-roboticattack"
+log_every_n_steps = 50
