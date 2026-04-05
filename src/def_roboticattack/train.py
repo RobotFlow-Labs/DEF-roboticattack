@@ -21,7 +21,6 @@ import torch.nn as nn
 from torch.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 
-from def_roboticattack.data.synthetic import SyntheticPatchDataset
 from def_roboticattack.models.patch_detector import PatchDetectorNet
 
 REQUIRED_CONFIG_SECTIONS = ("training", "model", "data", "checkpoint", "early_stopping", "logging")
@@ -197,23 +196,53 @@ def train(config: dict, resume: str | None = None, max_steps: int | None = None)
     else:
         batch_size = int(tc["batch_size"])
 
-    # H5: gradient accumulation
     grad_accum_steps = tc.get("gradient_accumulation", 1)
 
-    train_ds = SyntheticPatchDataset(
-        num_samples=dc["num_train_samples"],
-        image_size=image_size,
-        patch_ratio_range=(dc["patch_ratio_min"], dc["patch_ratio_max"]),
-        attack_prob=dc["attack_prob"],
-        seed=seed,
-    )
-    val_ds = SyntheticPatchDataset(
-        num_samples=dc["num_val_samples"],
-        image_size=image_size,
-        patch_ratio_range=(dc["patch_ratio_min"], dc["patch_ratio_max"]),
-        attack_prob=dc["attack_prob"],
-        seed=seed + 1,
-    )
+    # Build dataset — real LIBERO frames or synthetic
+    dataset_type = dc.get("dataset", "synthetic")
+    if dataset_type == "libero":
+        from pathlib import Path
+
+        from def_roboticattack.data.libero_defense import LIBERODefenseDataset
+
+        frames_dir = Path(dc["frames_dir"])
+        all_ds = LIBERODefenseDataset(
+            frames_dir=frames_dir,
+            image_size=image_size,
+            patch_ratio_range=(dc["patch_ratio_min"], dc["patch_ratio_max"]),
+            attack_prob=dc["attack_prob"],
+            max_frames=dc.get("max_train_frames", 0) + dc.get("max_val_frames", 0),
+            seed=seed,
+        )
+        # Split into train/val
+        n_total = len(all_ds)
+        max_train = dc.get("max_train_frames", n_total)
+        max_val = dc.get("max_val_frames", max(1, n_total // 10))
+        n_train = min(max_train, n_total - max_val)
+        n_val = min(max_val, n_total - n_train)
+        n_discard = n_total - n_train - n_val
+        train_ds, val_ds, _ = torch.utils.data.random_split(
+            all_ds, [n_train, n_val, n_discard],
+            generator=torch.Generator().manual_seed(seed),
+        )
+        print(f"[DATA] LIBERO real frames: {n_total} total, {n_train} train, {n_val} val")
+    else:
+        from def_roboticattack.data.synthetic import SyntheticPatchDataset
+
+        train_ds = SyntheticPatchDataset(
+            num_samples=dc["num_train_samples"],
+            image_size=image_size,
+            patch_ratio_range=(dc["patch_ratio_min"], dc["patch_ratio_max"]),
+            attack_prob=dc["attack_prob"],
+            seed=seed,
+        )
+        val_ds = SyntheticPatchDataset(
+            num_samples=dc["num_val_samples"],
+            image_size=image_size,
+            patch_ratio_range=(dc["patch_ratio_min"], dc["patch_ratio_max"]),
+            attack_prob=dc["attack_prob"],
+            seed=seed + 1,
+        )
     train_loader = DataLoader(
         train_ds, batch_size=batch_size, shuffle=True,
         num_workers=dc["num_workers"], pin_memory=dc["pin_memory"], drop_last=True,
