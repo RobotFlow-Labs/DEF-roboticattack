@@ -105,54 +105,55 @@ def load_config(path: str) -> dict:
 
 
 def find_batch_size(model: nn.Module, device: torch.device, image_size: int, target_util: float = 0.65) -> int:
-    """Auto-detect optimal batch size targeting GPU VRAM utilization."""
-    model.eval()
+    """Auto-detect optimal batch size targeting GPU VRAM utilization.
+
+    Simulates a full training step (forward + backward) to account for grad memory.
+    """
+    criterion = nn.BCEWithLogitsLoss()
+    model.train()
     torch.cuda.empty_cache()
     torch.cuda.reset_peak_memory_stats(device)
 
-    total_mem = torch.cuda.get_device_properties(device).total_mem
+    total_mem = torch.cuda.get_device_properties(device).total_memory
     target_bytes = target_util * total_mem
-    # Start small, grow exponentially
-    bs = 8
-    max_bs = 2048
-    best_bs = bs
+    max_bs = 512  # Cap for training (optimizer states multiply memory)
 
-    while bs <= max_bs:
+    def _try_bs(bs: int) -> bool:
         try:
             torch.cuda.empty_cache()
             torch.cuda.reset_peak_memory_stats(device)
             dummy = torch.rand(bs, 3, image_size, image_size, device=device)
-            with torch.no_grad():
-                _ = model(dummy)
+            labels = torch.rand(bs, 1, device=device)
+            out = model(dummy)
+            loss = criterion(out, labels)
+            loss.backward()
+            model.zero_grad(set_to_none=True)
             peak = torch.cuda.max_memory_allocated(device)
-            if peak <= target_bytes:
-                best_bs = bs
-                bs *= 2
-            else:
-                break
+            return peak <= target_bytes
         except RuntimeError:
+            model.zero_grad(set_to_none=True)
+            return False
+
+    # Exponential growth
+    bs = 8
+    best_bs = bs
+    while bs <= max_bs:
+        if _try_bs(bs):
+            best_bs = bs
+            bs *= 2
+        else:
             break
 
-    # Binary search between best_bs and bs
+    # Binary search
     lo, hi = best_bs, min(bs, max_bs)
     while lo < hi - 1:
         mid = (lo + hi) // 2
-        try:
-            torch.cuda.empty_cache()
-            torch.cuda.reset_peak_memory_stats(device)
-            dummy = torch.rand(mid, 3, image_size, image_size, device=device)
-            with torch.no_grad():
-                _ = model(dummy)
-            peak = torch.cuda.max_memory_allocated(device)
-            if peak <= target_bytes:
-                lo = mid
-            else:
-                hi = mid
-        except RuntimeError:
+        if _try_bs(mid):
+            lo = mid
+        else:
             hi = mid
 
     torch.cuda.empty_cache()
-    model.train()
     return lo
 
 
