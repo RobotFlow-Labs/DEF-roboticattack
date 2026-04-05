@@ -1,14 +1,18 @@
 """ANIMA serve integration for DEF-roboticattack.
 
-AnimaNode subclass that provides:
+Provides:
 - FastAPI /predict endpoint for adversarial patch detection
-- Health/ready/info endpoints (from base class)
+- Health/ready/info endpoints
 - Weight download from HuggingFace on startup
+
+Usage:
+    python -m def_roboticattack.serve
+    ANIMA_SERVE_PORT=8080 python -m def_roboticattack.serve
 """
 from __future__ import annotations
 
 import io
-import json
+import os
 import time
 from pathlib import Path
 
@@ -47,11 +51,11 @@ class DefRoboticAttackNode:
             state = load_file(str(safetensors_path), device=str(self.device))
             model.load_state_dict(state)
         elif pth_path.exists():
-            ckpt = torch.load(pth_path, map_location=self.device, weights_only=False)
+            ckpt = torch.load(pth_path, map_location=self.device, weights_only=True)
             state = ckpt["model"] if "model" in ckpt else ckpt
             model.load_state_dict(state)
         elif best_path.exists():
-            ckpt = torch.load(best_path, map_location=self.device, weights_only=False)
+            ckpt = torch.load(best_path, map_location=self.device, weights_only=True)
             state = ckpt["model"] if "model" in ckpt else ckpt
             model.load_state_dict(state)
         else:
@@ -60,10 +64,10 @@ class DefRoboticAttackNode:
         model.eval()
         self.model = model
 
-        # Set up full defense runtime
+        # Set up full defense runtime using public API
         self.runtime = DefenseRuntime(backend="cuda" if torch.cuda.is_available() else "cpu")
-        self.runtime._model = model
-        self.runtime._model_device = self.device
+        self.runtime.load_model()  # loads untrained
+        self.runtime._model.load_state_dict(model.state_dict())  # copy trained weights
         self._ready = True
         print(f"[SERVE] Model loaded on {self.device}, ready for inference")
 
@@ -126,3 +130,44 @@ class DefRoboticAttackNode:
                 "anomaly_scoring",
             ],
         }
+
+
+def create_app() -> "FastAPI":
+    """Create FastAPI application with standard ANIMA endpoints."""
+    from fastapi import FastAPI, UploadFile, File
+    from fastapi.responses import JSONResponse
+
+    app = FastAPI(title="DEF-roboticattack", version="0.1.0")
+    node = DefRoboticAttackNode()
+
+    weight_dir = os.environ.get("ANIMA_WEIGHT_DIR", "/data/weights")
+    node.setup_inference(weight_dir)
+
+    @app.get("/health")
+    def health():
+        return node.get_health()
+
+    @app.get("/ready")
+    def ready():
+        info = node.get_ready()
+        status_code = 200 if info["ready"] else 503
+        return JSONResponse(content=info, status_code=status_code)
+
+    @app.get("/info")
+    def info():
+        return node.get_info()
+
+    @app.post("/predict")
+    async def predict(file: UploadFile = File(...)):
+        image_bytes = await file.read()
+        return node.process(image_bytes=image_bytes)
+
+    return app
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    port = int(os.environ.get("ANIMA_SERVE_PORT", "8080"))
+    app = create_app()
+    uvicorn.run(app, host="0.0.0.0", port=port)

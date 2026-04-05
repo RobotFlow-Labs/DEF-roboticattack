@@ -47,12 +47,16 @@ def fused_patch_apply(
     if image.is_cuda:
         kernels = _load_cuda_kernels()
         if kernels is not None:
-            return kernels.fused_patch_apply(image, patch, pos_y, pos_x)
+            return kernels.fused_patch_apply(image.float(), patch.float(), pos_y, pos_x)
 
-    # CPU fallback
+    # CPU fallback with bounds clamping
     output = image.clone()
+    C, H, W = image.shape
     pH, pW = patch.shape[1], patch.shape[2]
-    output[:, pos_y : pos_y + pH, pos_x : pos_x + pW] = patch
+    end_y = min(pos_y + pH, H)
+    end_x = min(pos_x + pW, W)
+    if end_y > pos_y and end_x > pos_x:
+        output[:, pos_y:end_y, pos_x:end_x] = patch[:, : end_y - pos_y, : end_x - pos_x]
     return output
 
 
@@ -95,7 +99,7 @@ def fused_action_perturb(
     if actions.is_cuda:
         kernels = _load_cuda_kernels()
         if kernels is not None:
-            return kernels.fused_action_perturb(actions, grads, step_size, eps)
+            return kernels.fused_action_perturb(actions.float(), grads.float(), step_size, eps)
 
     # CPU fallback: FGSM-style sign step + projection
     sign = torch.sign(grads)

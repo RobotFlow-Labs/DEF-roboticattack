@@ -29,8 +29,8 @@ class OpenVLAGuard:
                 for item in pixel_values:
                     tensors.append(to_tensor(item))
                 return torch.stack(tensors, dim=0)
-        except Exception:
-            pass
+        except ImportError:
+            pass  # torch/torchvision not available — fall through to numpy path
 
         arr = np.asarray(pixel_values)
         if arr.ndim == 4 and arr.shape[-1] in (1, 3):

@@ -1,21 +1,32 @@
+"""Heuristic patch anomaly detection via edge energy analysis.
+
+Uses Sobel edge magnitude as a signal: adversarial patches create
+abnormally sharp edges. Scoring uses a fixed reference threshold
+(not per-batch statistics) so it works correctly at batch_size=1.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List
 
 import numpy as np
 
 
 @dataclass(frozen=True)
 class DetectionResult:
-    score: List[float]
-    zscore: List[float]
-    flagged: List[bool]
+    score: list[float]
+    flagged: list[bool]
 
 
 class PatchAnomalyDetector:
-    def __init__(self, threshold_z: float = 2.5):
-        self.threshold_z = threshold_z
+    def __init__(self, edge_threshold: float = 0.15):
+        """Initialize detector with fixed edge magnitude threshold.
+
+        Args:
+            edge_threshold: absolute edge magnitude above which an image
+                is flagged as potentially containing an adversarial patch.
+                Determined empirically from clean VLA image distribution.
+        """
+        self.edge_threshold = edge_threshold
 
     def score_torch(self, images) -> DetectionResult:
         import torch
@@ -39,14 +50,10 @@ class PatchAnomalyDetector:
         gy = F.conv2d(images, sobel_y.repeat(images.shape[1], 1, 1, 1), padding=1, groups=images.shape[1])
         mag = torch.sqrt(gx * gx + gy * gy).mean(dim=(1, 2, 3))
 
-        mean = mag.mean()
-        std = mag.std(unbiased=False) + 1e-6
-        z = (mag - mean) / std
-        flagged = z > self.threshold_z
+        flagged = mag > self.edge_threshold
 
         return DetectionResult(
             score=mag.detach().cpu().tolist(),
-            zscore=z.detach().cpu().tolist(),
             flagged=flagged.detach().cpu().tolist(),
         )
 
@@ -58,13 +65,9 @@ class PatchAnomalyDetector:
         dy = np.abs(np.diff(images, axis=2, prepend=images[:, :, :1, :]))
         mag = np.sqrt(dx * dx + dy * dy).mean(axis=(1, 2, 3))
 
-        mean = float(mag.mean())
-        std = float(mag.std()) + 1e-6
-        z = (mag - mean) / std
-        flagged = z > self.threshold_z
+        flagged = mag > self.edge_threshold
 
         return DetectionResult(
             score=mag.astype(float).tolist(),
-            zscore=z.astype(float).tolist(),
             flagged=flagged.astype(bool).tolist(),
         )

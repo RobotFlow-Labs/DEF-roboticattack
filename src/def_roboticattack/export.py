@@ -152,7 +152,7 @@ def run_export(checkpoint_path: str, output_dir: str, image_size: int = 224):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = PatchDetectorNet(in_channels=3).to(device)
 
-    ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    ckpt = torch.load(checkpoint_path, map_location=device, weights_only=True)
     state = ckpt["model"] if "model" in ckpt else ckpt
     model.load_state_dict(state)
     model.eval()

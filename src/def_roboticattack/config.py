@@ -5,6 +5,6 @@ from dataclasses import dataclass
 class DefenseConfig:
     """Runtime knobs for baseline patch-defense scaffolding."""
 
-    anomaly_threshold_z: float = 2.5
+    edge_threshold: float = 0.15
     clamp_percentile: float = 99.5
     blur_strength: float = 0.15

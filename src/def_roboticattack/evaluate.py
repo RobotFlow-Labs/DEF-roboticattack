@@ -142,7 +142,7 @@ def run_eval(checkpoint_path: str, num_samples: int = 5000, batch_size: int = 32
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = PatchDetectorNet(in_channels=3).to(device)
 
-    ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    ckpt = torch.load(checkpoint_path, map_location=device, weights_only=True)
     state = ckpt["model"] if "model" in ckpt else ckpt
     model.load_state_dict(state)
     model.eval()

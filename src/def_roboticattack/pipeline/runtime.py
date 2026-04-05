@@ -3,7 +3,7 @@
 Integrates:
 - PatchDetectorNet (trained CNN for patch detection)
 - Input sanitization transforms (clamp + blur)
-- Heuristic anomaly scoring (Sobel edge z-score)
+- Heuristic anomaly scoring (Sobel edge magnitude, fixed threshold)
 - CUDA-accelerated ops when available
 """
 from __future__ import annotations
@@ -22,7 +22,7 @@ class DefenseRuntime:
     def __init__(self, config: DefenseConfig | None = None, backend: str | None = None):
         self.config = config or DefenseConfig()
         self.backend_info: BackendInfo = resolve_backend(backend)
-        self.detector = PatchAnomalyDetector(threshold_z=self.config.anomaly_threshold_z)
+        self.detector = PatchAnomalyDetector(edge_threshold=self.config.edge_threshold)
         self._model = None
         self._model_device = None
 
@@ -36,7 +36,7 @@ class DefenseRuntime:
         model = PatchDetectorNet(in_channels=3).to(device)
 
         if checkpoint_path is not None:
-            ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
+            ckpt = torch.load(checkpoint_path, map_location=device, weights_only=True)
             state = ckpt["model"] if "model" in ckpt else ckpt
             model.load_state_dict(state)
 
@@ -57,10 +57,7 @@ class DefenseRuntime:
         return np_images, detection
 
     def detect_patches(self, images) -> dict:
-        """Run trained neural patch detector. Returns probabilities and flags.
-
-        Requires load_model() to have been called first.
-        """
+        """Run trained neural patch detector. Returns probabilities and flags."""
         import torch
 
         if self._model is None:
@@ -84,27 +81,30 @@ class DefenseRuntime:
     def full_defense(self, images) -> dict:
         """Full defense pipeline: sanitize + heuristic score + neural detection."""
         sanitized, heuristic_detection = self.sanitize_and_score(images)
+        heuristic_risk = self.aggregate_risk(heuristic_detection)
 
         result = {
             "sanitized": sanitized,
             "heuristic": heuristic_detection,
-            "heuristic_risk": self.aggregate_risk(heuristic_detection),
+            "heuristic_risk": heuristic_risk,
         }
 
         if self._model is not None:
             neural_result = self.detect_patches(sanitized)
             result["neural"] = neural_result
-            result["combined_risk"] = max(
-                result["heuristic_risk"],
-                neural_result["max_prob"],
-            )
+            # Both heuristic_risk and neural max_prob are now in [0, 1]
+            result["combined_risk"] = max(heuristic_risk, neural_result["max_prob"])
         else:
-            result["combined_risk"] = result["heuristic_risk"]
+            result["combined_risk"] = heuristic_risk
 
         return result
 
     @staticmethod
     def aggregate_risk(detection: DetectionResult) -> float:
-        if not detection.zscore:
+        """Return max score normalized to [0, 1] range."""
+        if not detection.score:
             return 0.0
-        return float(max(detection.zscore))
+        # Edge magnitude scores are typically in [0, 0.5] range for natural images.
+        # Normalize to [0, 1] with a soft saturation at 0.3.
+        raw = float(max(detection.score))
+        return min(1.0, raw / 0.3)

@@ -231,7 +231,7 @@ def train(config: dict, resume: str | None = None, max_steps: int | None = None)
     start_epoch = 0
     global_step = 0
     if resume:
-        ckpt = torch.load(resume, map_location=device, weights_only=False)
+        ckpt = torch.load(resume, map_location=device, weights_only=False)  # noqa: S614 — needs optimizer/scheduler state
         model.load_state_dict(ckpt["model"])
         optimizer.load_state_dict(ckpt["optimizer"])
         scheduler.load_state_dict(ckpt["scheduler"])
