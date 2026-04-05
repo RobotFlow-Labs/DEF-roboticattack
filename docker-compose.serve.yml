@@ -1,0 +1,53 @@
+version: "3.8"
+
+services:
+  serve:
+    build:
+      context: .
+      dockerfile: Dockerfile.serve
+    profiles: ["serve"]
+    network_mode: host
+    env_file: .env.serve
+    volumes:
+      - weights:/data/weights
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.serve
+    profiles: ["api"]
+    network_mode: host
+    env_file: .env.serve
+    environment:
+      - ANIMA_ROS2_ENABLED=false
+    volumes:
+      - weights:/data/weights
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.serve
+    profiles: ["test"]
+    network_mode: host
+    env_file: .env.serve
+    command: ["python", "-m", "pytest", "tests/", "-x", "-v"]
+    volumes:
+      - weights:/data/weights
+
+volumes:
+  weights:

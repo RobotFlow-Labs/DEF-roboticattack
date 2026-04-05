@@ -1,0 +1,50 @@
+name: def-roboticattack
+version: "0.1.0"
+description: "Defense module for adversarial patch detection in VLA robotic systems"
+domain: defense
+wave: 8
+paper: "VLA Adversarial Vulnerabilities (UADA/UPA/TMA) ICCV 2025"
+arxiv: "2411.13587"
+
+capabilities:
+  - adversarial_patch_detection
+  - input_sanitization
+  - anomaly_scoring
+  - vla_defense_runtime
+
+api:
+  predict:
+    input:
+      type: image
+      format: "NCHW float32"
+      shape: [null, 3, 224, 224]
+    output:
+      type: json
+      fields:
+        - name: probabilities
+          type: "list[float]"
+          description: "Per-image adversarial patch probability"
+        - name: flagged
+          type: "list[bool]"
+          description: "Per-image flag (prob > 0.5)"
+        - name: combined_risk
+          type: float
+          description: "Max risk score across heuristic + neural"
+
+docker:
+  base: "ghcr.io/robotflow-labs/anima-serve:jazzy"
+  port: 8080
+  gpu: true
+  weights:
+    hf_repo: "ilessio-aiflowlab/DEF-roboticattack"
+    format: safetensors
+
+ros2:
+  node_name: "def_roboticattack_node"
+  topics:
+    subscribe:
+      - name: "/camera/image_raw"
+        type: "sensor_msgs/msg/Image"
+    publish:
+      - name: "/defense/patch_detection"
+        type: "std_msgs/msg/String"

@@ -1,0 +1,40 @@
+# DEF-roboticattack — 3-layer ANIMA serving image
+# Layer 1: anima-base (ROS2 jazzy + CycloneDDS + uv)
+# Layer 2: anima-serve (FastAPI + health + AnimaNode)
+# Layer 3: this module (PatchDetectorNet defense)
+
+FROM ghcr.io/robotflow-labs/anima-serve:jazzy AS base
+
+WORKDIR /app
+
+# Install module dependencies
+COPY pyproject.toml .
+RUN uv pip install --system --no-cache-dir \
+    numpy>=1.26 typer>=0.12.3 pydantic>=2.8 \
+    safetensors>=0.4 onnx>=1.15 \
+    torch torchvision --index-url https://download.pytorch.org/whl/cu128
+
+# Copy module source
+COPY src/ src/
+COPY configs/ configs/
+COPY kernels/ kernels/
+COPY anima_module.yaml .
+
+# Install module
+RUN uv pip install --system --no-cache-dir -e .
+
+# Weights download at runtime from HF (not baked in)
+ENV ANIMA_MODULE_NAME=def-roboticattack
+ENV ANIMA_MODULE_VERSION=0.1.0
+ENV ANIMA_HF_REPO=ilessio-aiflowlab/DEF-roboticattack
+ENV ANIMA_DEVICE=auto
+ENV ANIMA_WEIGHT_FORMAT=auto
+ENV ANIMA_SERVE_PORT=8080
+ENV ANIMA_WEIGHT_DIR=/data/weights
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+CMD ["python", "-m", "def_roboticattack.serve"]
